@@ -1,0 +1,40 @@
+vbrew install minikube
+  561  curl -Lo minikube https://github.com/kubernetes/minikube/releases/download/v1.25.1/minikube-darwin-arm64 \\n  && chmod +x minikube\n
+  562  sudo install minikube /usr/local/bin/minikube
+  563  minikube version
+  564  minikube start --driver=docker
+  565  brew install --cask docker
+  566  minikube start --driver=docker
+  567  echo $path\n
+  568  vi /etc/paths
+  569  ll
+  570  ls
+  571  ls -al
+  572  vi .bash_profile
+  573  minikube start --driver=docker
+  574  minikube delete
+  575  minikube start --kubernetes-version=v1.22
+  576  minikube start --kubernetes-version=v1.22.5
+  577  brew install kubectl
+  578  brew uninstall kubectl
+  579  kubectl nodes
+  580  docker ps
+  581  kubectl nodes;
+  582  kubectl get all
+  583  cd /etc/
+  584  ls
+  585  find docker
+  586  cd ~
+  587  ls
+  588  systemctl status docker
+  589  kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.5.0/aio/deploy/recommended.yaml\n
+  590  \tkubectl get services -n kubernetes-dashboard\n
+  591  wget https://raw.githubusercontent.com/kubernetes/dashboard/v2.5.0/aio/deploy/recommended.yaml\n\tvi recommended.yaml\n
+  592  borw wget
+  593  bowr
+  594  brew install wget
+  595  kubectl proxy
+  596  cat <<EOF | kubectl create -f -\n apiVersion: v1\n kind: ServiceAccount\n metadata:\n   name: admin-user\n   namespace: kube-system\nEOF
+  597  cat <<EOF | kubectl create -f -\n apiVersion: rbac.authorization.k8s.io/v1\n kind: ClusterRoleBinding\n metadata:\n   name: admin-user\n roleRef:\n   apiGroup: rbac.authorization.k8s.io\n   kind: ClusterRole\n   name: cluster-admin\n subjects:\n - kind: ServiceAccount\n   name: admin-user\n   namespace: kube-system\nEOF
+  598  kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep admin-user | awk '{print $1}')\n
+➜  ~
