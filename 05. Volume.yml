@@ -1,0 +1,104 @@
+#empty_dir pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-emptydir-4
+spec:
+  containers:
+  - name: container1
+    image: yoskr/yos_node:0.1
+    ports:
+      - containerPort: 8000
+    volumeMounts:
+    - name: empty-dir
+      mountPath: /empd
+  - name: container2
+    image: yoskr/yos_node:0.2
+    ports:
+      - containerPort: 9000
+    volumeMounts:
+    - name: empty-dir
+      mountPath: /empd
+  volumes:
+  - name : empty-dir
+    emptyDir: {}
+    
+---
+#hostpath type pod 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-hos-path-3
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: node1
+  containers:
+  - name: container
+    image: yoskr/yos_node:0.2
+    ports:
+      - containerPort: 9000
+    volumeMounts:
+    - name: host-path
+      mountPath: /mount1
+  volumes:
+  - name : host-path
+    hostPath:
+      path: /node-vol
+      type: DirectoryOrCreate
+      
+---
+#pv / pvc
+#pv
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-03
+spec:
+  capacity:
+    storage: 2G #용량2기가
+  accessModes:
+  - ReadWriteOnce
+  #ReadWriteOnce: 노드 하나에만 볼륨을 읽기/쓰기하도록 마운트할 수 있음
+  #ReadOnlyMany: 여러 개 노드에서 읽기 전용으로 마운트할 수 있음
+  #ReadWriteMany: 여러 개 노드에서 읽기/쓰기 가능하도록 마운트할 수 있음
+  local: #지금은 로컬에 연결 각종타입이 지원됨
+    path: /node-v
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - {key: kubernetes.io/hostname, operator: In, values: [노드이름]}
+        
+#pvc    
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-01
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1G
+  storageClassName: ""
+  
+---
+
+# pv - pvc - pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-volume-3
+spec:
+  containers:
+  - name: container
+    image: yoskr/yos_node:0.2
+    volumeMounts:
+    - name: pvc-pv
+      mountPath: /mount3
+  volumes:
+  - name : pvc-pv
+    persistentVolumeClaim:
+      claimName: pvc-01
