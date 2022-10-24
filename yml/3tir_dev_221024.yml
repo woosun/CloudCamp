@@ -1,0 +1,277 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  namespace: dev
+  name: mysql-pv-dev
+spec:
+  capacity:
+    storage: 5G #용량2기가
+  accessModes:
+  - ReadWriteOnce
+  local: #지금은 로컬에 연결 각종타입이 지원됨
+    path: /3tir/dev/mysql #디렉토리를 생성해둬야함
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - {key: kubernetes.io/hostname, operator: In, values: [node1,node2]}
+
+---
+
+#PVC 로 PV연동
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: dev
+  name: mysql-pvc-dev
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5G
+  storageClassName: ""
+
+---
+
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: dev
+  name: mysql-server
+  labels:
+     app: db-pod
+spec:
+  containers:
+  - name: mysql
+    image: mysql
+    ports:
+    - containerPort: 3306
+    envFrom:
+    - secretRef:
+        name: sec-mysql  #mysql 설정파일을 불러오자
+    volumeMounts:
+    - mountPath: /var/lib/mysql
+      name: mysql-pvc-pv-dev
+  volumes:
+  - name : mysql-pvc-pv-dev
+    persistentVolumeClaim:
+      claimName: mysql-pvc-dev
+---
+
+
+
+---
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  namespace: dev
+  name: pv-was-dev
+spec:
+  capacity:
+    storage: 1G #용량1기가
+  accessModes:
+  - ReadWriteOnce
+  local: #지금은 로컬에 연결 각종타입이 지원됨
+    path: /3tir/dev/was #디렉토리를 생성해둬야함
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - {key: kubernetes.io/hostname, operator: In, values: [node1,node2]}
+
+---
+#was pvc
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: dev
+  name: pvc-was-dev
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1G
+  storageClassName: ""
+
+
+#was pod
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: dev
+  name: was-deploy-dev
+spec:
+  selector:
+    matchLabels:
+      servertype: was-cpu-dev
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        servertype: was-cpu-dev
+    spec:
+      containers:
+      - name: was
+        image: yoskr/tomcat:1.1
+        envFrom:
+        - configMapRef:
+            name: cm-was  #cm-dev 설정파일을 불러오자
+        ports:
+        - containerPort: 8009
+        volumeMounts:
+        - mountPath: /usr/local/tomcat/webapps
+          name: was-pvc-pv-dev
+          requests:
+            cpu: 100m
+          limits:
+            cpu: 200m
+      volumes:
+      - name : was-pvc-pv-dev
+        persistentVolumeClaim:
+          claimName: pvc-was-dev
+
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  namespace: dev
+  name: hpa-was-cpu-dev
+spec:
+  maxReplicas: 5
+  minReplicas: 2
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: was-deploy-dev
+  metrics:
+  - type: Resource 
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: dev
+  name: svc-was
+spec:
+  selector:
+    servertype: was-cpu-dev
+  ports:
+  - name: live
+    port: 8009
+    containerPort: 8009
+
+
+#web pv
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  namespace: dev
+  name: pv-web-dev
+spec:
+  capacity:
+    storage: 1G #용량2기가
+  accessModes:
+  - ReadWriteOnce
+  local: #지금은 로컬에 연결 각종타입이 지원됨
+    path: /3tir/dev/web
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - {key: kubernetes.io/hostname, operator: In, values: [node2]}
+
+---
+#web pvc
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: dev
+  name: pvc-web-dev
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1G
+  storageClassName: ""
+---
+#web pod
+
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: dev
+  name: web-deploy-dev
+spec:
+  selector:
+    matchLabels:
+      servertype: web-cpu-dev
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        servertype: web-cpu-dev
+    spec:
+      containers:
+      - name: web
+        image: yoskr/httpd:0.4
+        resources:
+          requests:
+            cpu: 100m
+          limits:
+            cpu: 200m
+        envFrom:
+        - configMapRef:
+            name: cm-httpd  #cm-httpd 설정파일을 불러오자
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /usr/local/apache2/htdocs
+          name: web-pvc-pv-dev
+      volumes:
+      - name : web-pvc-pv-dev
+        persistentVolumeClaim:
+          claimName: pvc-web-dev
+
+---
+
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  namespace: dev
+  name: hpa-web-cpu-dev
+spec:
+  maxReplicas: 5
+  minReplicas: 2
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-deploy-dev
+  metrics:
+  - type: Resource 
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: dev
+  name: svc-web-dev
+spec:
+  selector:
+    servertype: web-cpu-dev
+  ports:
+  - port: 80 # 사용자들이 접속할 포트
+    targetPort: 80 # 파드의 포트번호
+  type: LoadBalancer
