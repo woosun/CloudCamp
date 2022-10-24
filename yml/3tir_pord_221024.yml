@@ -1,0 +1,362 @@
+---
+# prod 네임스페이스 셋팅
+
+#네임스페이스 선언
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prod
+---
+
+#db 설정파일
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: prod
+  name: sec-mysql
+data:
+  MYSQL_ROOT_PASSWORD: cXdlcjEyMzQ=  #qwer1234 를 base64 인코딩한값
+
+
+---
+
+#was 설정파일
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: prod
+  name: cm-was
+data:
+  TYPE: '0.0.0.0'
+
+---
+
+#web 설정파일
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: prod
+  name: cm-httpd
+data:
+  TYPE: 'svc-was'
+
+---
+#PV생성 (mysql)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  namespace: prod
+  name: mysql-pv
+spec:
+  capacity:
+    storage: 10G #용량2기가
+  accessModes:
+  - ReadWriteOnce
+  local: #지금은 로컬에 연결 각종타입이 지원됨
+    path: /3tir/prod/mysql #디렉토리를 생성해둬야함
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - {key: kubernetes.io/hostname, operator: In, values: [node1,node2]}
+
+---
+
+#PVC 로 PV연동
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: prod
+  name: mysql-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10G
+  storageClassName: ""
+
+---
+
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: prod
+  name: mysql-server
+  labels:
+     app: db-pod
+spec:
+  containers:
+  - name: mysql
+    image: mysql
+    ports:
+    - containerPort: 3306
+    envFrom:
+    - secretRef:
+        name: sec-mysql  #mysql 설정파일을 불러오자
+    volumeMounts:
+    - mountPath: /var/lib/mysql
+      name: mysql-pvc-pv
+  volumes:
+  - name : mysql-pvc-pv
+    persistentVolumeClaim:
+      claimName: mysql-pvc
+
+
+---
+
+#mysql 서비스 생성
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: svc-mysql
+spec:
+  selector:
+    app: db-pod
+  ports:
+  - port: 3306
+    containerPort: 3306
+
+
+
+---
+---
+#db 생성 끝
+---
+---
+
+
+---
+---
+#was 생성 시작
+---
+---
+
+
+
+---
+#was pv
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  namespace: prod
+  name: pv-was
+spec:
+  capacity:
+    storage: 1G #용량1기가
+  accessModes:
+  - ReadWriteOnce
+  local: #지금은 로컬에 연결 각종타입이 지원됨
+    path: /3tir/prod/was #디렉토리를 생성해둬야함
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - {key: kubernetes.io/hostname, operator: In, values: [node1,node2]}
+
+---
+#was pvc
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: prod
+  name: pvc-was
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1G
+  storageClassName: ""
+
+
+---
+#was pod
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prod
+  name: was-deploy
+spec:
+  selector:
+    matchLabels:
+      servertype: was-cpu
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        servertype: was-cpu
+    spec:
+      containers:
+      - name: was
+        image: yoskr/tomcat:1.1
+        envFrom:
+        - configMapRef:
+            name: cm-was  #cm-dev 설정파일을 불러오자
+        ports:
+        - containerPort: 8009
+        volumeMounts:
+        - mountPath: /usr/local/tomcat/webapps
+          name: was-pvc-pv
+          requests:
+            cpu: 100m
+          limits:
+            cpu: 200m
+      volumes:
+      - name : was-pvc-pv
+        persistentVolumeClaim:
+          claimName: pvc-was
+
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-was-cpu
+spec:
+  maxReplicas: 5
+  minReplicas: 2
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: was-deploy
+  metrics:
+  - type: Resource 
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: svc-was
+spec:
+  selector:
+    servertype: was-cpu
+  ports:
+  - name: live
+    port: 8009
+    containerPort: 8009
+---
+---
+#was 생성 끝
+---
+---
+
+
+
+---
+---
+#web 생성 시작
+---
+---
+
+---
+#web pv
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  namespace: prod
+  name: pv-web
+spec:
+  capacity:
+    storage: 1G #용량2기가
+  accessModes:
+  - ReadWriteOnce
+  local: #지금은 로컬에 연결 각종타입이 지원됨
+    path: /3tir/prod/web
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - {key: kubernetes.io/hostname, operator: In, values: [node1,node2]}
+
+---
+#web pvc
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: prod
+  name: pvc-web
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1G
+  storageClassName: ""
+---
+#web pod
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prod
+  name: web-deploy
+spec:
+  selector:
+    matchLabels:
+      servertype: web-cpu
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        servertype: web-cpu
+    spec:
+      containers:
+      - name: web
+        image: yoskr/httpd:0.4
+        resources:
+          requests:
+            cpu: 100m
+          limits:
+            cpu: 200m
+        envFrom:
+        - configMapRef:
+            name: cm-httpd  #cm-httpd 설정파일을 불러오자
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /usr/local/apache2/htdocs
+          name: web-pvc-pv
+      volumes:
+      - name : web-pvc-pv
+        persistentVolumeClaim:
+          claimName: pvc-web
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  namespace: prod
+  name: hpa-web-cpu
+spec:
+  maxReplicas: 5
+  minReplicas: 2
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-deploy
+  metrics:
+  - type: Resource 
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: svc-web
+spec:
+  selector:
+    servertype: web-cpu
+  ports:
+  - port: 80 # 사용자들이 접속할 포트
+    targetPort: 80 # 파드의 포트번호
+  type: LoadBalancer
